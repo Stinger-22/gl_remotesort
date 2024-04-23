@@ -35,7 +35,7 @@ int Server::start()
         return -1;
     }
 
-    // WARNING User have to remember to free this.
+    // WARNING: User have to remember to free this. Maybe should create wrapper class
     freeaddrinfo(serverAddresses);
 
     mainloop();

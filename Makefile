@@ -14,7 +14,7 @@ server: $(BUILDDIR)appServer.o $(BUILDDIR)util.o $(BUILDDIR)server.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 	@echo "Build finished: $@"
 
-client: $(BUILDDIR)appClient.o $(BUILDDIR)util.o
+client: $(BUILDDIR)appClient.o $(BUILDDIR)util.o $(BUILDDIR)client.o
 	@echo "Building: $@"
 	$(CXX) $(CXXFLAGS) -o $@ $^
 	@echo "Build finished: $@"
@@ -28,6 +28,10 @@ $(BUILDDIR)appServer.o: $(SOURCEDIR)appServer.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILDDIR)server.o: $(SOURCEDIR)server.cpp $(INCLUDEDIR)server.hpp
+	@echo "Compiling: $@"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILDDIR)client.o: $(SOURCEDIR)client.cpp $(INCLUDEDIR)client.hpp
 	@echo "Compiling: $@"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
