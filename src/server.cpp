@@ -1,94 +1,148 @@
-#include <cstdlib>
-#include <cstring>
+#include <cerrno>
+#include <server.hpp>
+
 #include <iostream>
-
+#include <climits>
+#include <cstring>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-
-#include <util.hpp>
+#include <netdb.h>
 
 
-void echoServe(int acceptedSocketFD);
-
-int main(int argc, char const *argv[])
+Server::Server(const char* port)
 {
-	if (argc != 2)
-	{
-		std::cout << "You should pass port on which server will listen" << std::endl;
-		exit(1);
-	}
-	int port = parsePort(argv[1]);
-	std::cout << "Starting echo-server on port " << port << "!" << std::endl;
-
-	// FD - File Descriptor
-	int socketFD, acceptedSocketFD;
-	socklen_t clientSize;
-	struct sockaddr_in serverAddress, clientAddress;
-
-	socketFD = socket(AF_INET, SOCK_STREAM, 0);
-	if (socketFD == -1)
-	{
-        reportError("ERROR opening socket", 1);
-	}
-
-	std::memset(&serverAddress, 0, sizeof(serverAddress));
-	serverAddress.sin_family = AF_INET;
-	serverAddress.sin_addr.s_addr = INADDR_ANY; // Set hostname
-	serverAddress.sin_port = htons(port);
-
-	if (bind(socketFD, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) == -1)
-	{
-		reportError("ERROR on binding", 1);
-	}
-
-	listen(socketFD, 5);
-
-	clientSize = sizeof(clientAddress);
-
-	int pid;
-	while (1)
-	{
-		acceptedSocketFD = accept(socketFD, (struct sockaddr *) &clientAddress, &clientSize);
-		if (acceptedSocketFD == -1)
-		{
-			reportError("ERROR on accept", 1);
-		}
-		pid = fork();
-		if (pid == -1)
-		{
-             reportError("ERROR on fork", 1);
-		}
-		else if (pid == 0)
-		{
-			close(socketFD);
-			echoServe(acceptedSocketFD);
-			exit(0);
-		}
-		close(acceptedSocketFD);
-	}
-	close(socketFD);
-	return 0;
+    this->port = port;
+    char hostname[HOST_NAME_MAX + 1] = {0};
+    gethostname(hostname, HOST_NAME_MAX);
+    this->hostname = hostname;
 }
 
-void echoServe(int acceptedSocketFD)
+Server::~Server()
 {
-	int messageSize;
-	char buffer[256];
 
-	std::memset(buffer, 0, sizeof(buffer));
-	messageSize = read(acceptedSocketFD, buffer, 255);
-	if (messageSize < 0)
-	{
-		reportError("ERROR reading client message from socket", 1);
-	}
-	std::cout << "Received message: " << buffer << std::endl;
+}
+
+int Server::start()
+{
+    addrinfo* serverAddresses = getServerAddresses();
+    if (serverAddresses == nullptr)
+    {
+        return -1;
+    }
+
+    serverSocket = createServerSocket(serverAddresses);
+    if (serverSocket == -1)
+    {
+        return -1;
+    }
+
+    // WARNING User have to remember to free this.
+    freeaddrinfo(serverAddresses);
+
+    mainloop();
+    // Can't return 0 cause server is running in the same thread.
+}
+
+void Server::shutdown()
+{
+    std::cerr << "[Info] Shutting down the server...\n";
+    if (close(serverSocket) == -1)
+    {
+        std::clog << "[Error] Failed to close serverSocket: close(): " << std::system_category().message(errno) << std::endl;
+        exit(-1);
+    }
+    std::cerr << "[Info] Server is shut down." << std::endl;
+}
 
 
-	messageSize = write(acceptedSocketFD, buffer, messageSize);
-	if (messageSize < 0)
-	{
-		reportError("ERROR writing echo to socket", 1);
-	}
+void Server::mainloop()
+{
+    struct sockaddr_in clientAddress;
+    socklen_t clientSize = sizeof(clientAddress);;
+    int clientSocket;
+    while (1)
+    {
+        clientSocket = accept(serverSocket, (struct sockaddr *) &clientAddress, &clientSize);
+        if (clientSocket == -1)
+        {
+            std::clog << "[Error] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
+        }
+        echoServe(clientSocket);
+        close(clientSocket);
+    }
+    // serverSocket is not closed
+}
+
+void Server::echoServe(int clientSocket)
+{
+    int messageSize;
+    char buffer[256];
+
+    std::memset(buffer, 0, sizeof(buffer));
+    // TODO Here should be reading cycle
+    messageSize = read(clientSocket, buffer, 255);
+    if (messageSize == -1)
+    {
+        std::clog << "[Error] Failed to read client's message: read(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+    std::cout << "Received message: " << buffer << std::endl;
+
+
+    messageSize = write(clientSocket, buffer, messageSize);
+    if (messageSize == -1)
+    {
+        std::clog << "[Error] Failed to write reply with echo: write(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+}
+
+addrinfo* Server::getServerAddresses() noexcept
+{
+    addrinfo hints, *serverAddress;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    std::clog << "[Debug] Resolving server hostname.\n";
+    if (getaddrinfo(hostname.c_str(), port.c_str(), &hints, &serverAddress) != 0)
+    {
+        std::clog << "[Error] Failed to resolve server's local address: getaddrinfo(): " << std::system_category().message(errno) << std::endl;
+        return nullptr;
+    }
+
+    return serverAddress;
+}
+
+int Server::createServerSocket(addrinfo* serverAddress) noexcept
+{
+    if (serverAddress == nullptr)
+    {
+        std::clog << "[Error] createServerSocket(): serverAddress is nullptr." << std::endl;
+        return -1;
+    }
+
+    std::clog << "[Debug] Creating server socket object.\n";
+    int serverSocket = socket(serverAddress->ai_family,
+                              serverAddress->ai_socktype,
+                              serverAddress->ai_protocol);
+    if (serverSocket == -1)
+    {
+        std::clog << "[Error] Failed to create server socket: socket(): " << std::system_category().message((errno)) << std::endl;
+        return -1;
+    }
+
+    std::clog << "[Debug] Binding socket to the resolved address." << std::endl;
+    if (bind(serverSocket, serverAddress->ai_addr, serverAddress->ai_addrlen) == -1)
+    {
+        std::clog << "[Error] Failed to bind server socket to address " << hostname << ":" << port << " : bind(): " << std::system_category().message((errno)) << std::endl;
+        return -1;
+    }
+
+    std::clog << "[Debug] Activating server listenning mode.\n";
+    if (listen(serverSocket, WAITING_REQUESTS) == -1){
+        std::clog << "[Error] Failed to activate socket listenner: listen(): " << std::system_category().message((errno)) << std::endl;
+        return -1;
+    }
+    std::clog << "[Info] Server is listenning for incoming connections at " << hostname << ":" << port << std::endl;
+    return serverSocket;
 }

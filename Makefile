@@ -9,21 +9,25 @@ BUILDDIR  = ./build/
 all: server client
 	@echo "Build successful!"
 
-server: $(BUILDDIR)server.o $(BUILDDIR)util.o
+server: $(BUILDDIR)appServer.o $(BUILDDIR)util.o $(BUILDDIR)server.o
 	@echo "Building: $@"
 	$(CXX) $(CXXFLAGS) -o $@ $^
 	@echo "Build finished: $@"
 
-client: $(BUILDDIR)client.o $(BUILDDIR)util.o
+client: $(BUILDDIR)appClient.o $(BUILDDIR)util.o
 	@echo "Building: $@"
 	$(CXX) $(CXXFLAGS) -o $@ $^
 	@echo "Build finished: $@"
 
-$(BUILDDIR)client.o: $(SOURCEDIR)client.cpp
+$(BUILDDIR)appClient.o: $(SOURCEDIR)appClient.cpp
 	@echo "Compiling: $@"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILDDIR)server.o: $(SOURCEDIR)server.cpp
+$(BUILDDIR)appServer.o: $(SOURCEDIR)appServer.cpp
+	@echo "Compiling: $@"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILDDIR)server.o: $(SOURCEDIR)server.cpp $(INCLUDEDIR)server.hpp
 	@echo "Compiling: $@"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
