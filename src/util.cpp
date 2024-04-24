@@ -1,28 +1,29 @@
-#include <climits>
 #include <util.hpp>
 
+#include <string>
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
 
-void reportError(const char* msg, int terminate)
+
+std::string remove_extension(const std::string& filename)
 {
-	perror(msg);
-	if (terminate)
-	{
-		exit(-1);
-	}
+    size_t lastdot = filename.find_last_of(".");
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot);
 }
 
-int parsePort(const char* portStr)
+int compareByFilename(const FileInfo& left, const FileInfo& right)
 {
-	long parsedPort = strtol(portStr, NULL, 10);
-	if ( (parsedPort == 0L) || (parsedPort == LONG_MAX) || (parsedPort == LONG_MIN) )
-	{
-		reportError("ERROR invalid port number", 1);
-	}
-	if (parsedPort > 65535)
-	{
-		reportError("ERROR invalid port number", 1);
-	}
-	return (int) parsedPort;
+    return left.filename < right.filename;
+}
+
+int compareByExtension(const FileInfo& left, const FileInfo& right)
+{
+    return left.extension < right.extension;
+}
+
+int compareByTime(const FileInfo& left, const FileInfo& right)
+{
+    return left.time > right.time;
 }

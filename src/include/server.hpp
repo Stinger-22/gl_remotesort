@@ -1,7 +1,10 @@
 #ifndef REMOTESORT_SERVER_HPP
 #define REMOTESORT_SERVER_HPP
 
+#include <networking.hpp>
+
 #include <string>
+#include <vector>
 #include <netdb.h>
 
 class Server
@@ -29,6 +32,9 @@ private:
 
     void mainloop();
     void echoServe(int clientSocket);
+    void sortServe(int clientSocket);
+    std::vector<struct FileInfo> sortFiles(char* path, SortingRequest::SortBy sortBy);
+    void sendResponse(int clientSocket, std::vector<struct FileInfo> foundFiles);
 };
 
 #endif

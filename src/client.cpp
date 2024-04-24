@@ -34,26 +34,8 @@ void Client::request()
     // WARNING: User have to remember to free this. Maybe should create wrapper class
     freeaddrinfo(serverAddress);
 
-    int messageSize;
-    char buffer[256];
-    std::cout << "Please enter the message: ";
-    std::memset(buffer, 0, sizeof(buffer));
-    std::cin.getline(buffer, 255);
-    messageSize = write(clientSocket, buffer, strlen(buffer));
-    if (messageSize < 0)
-    {
-        std::clog << "[Error] Failed to write message to server: write(): " << std::system_category().message(errno) << std::endl;
-        return;
-    }
-
-    std::memset(buffer, 0, sizeof(buffer));
-    messageSize = read(clientSocket, buffer, 255);
-    if (messageSize < 0)
-    {
-        std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
-    }
-    std::cout << "Echo: " << buffer << std::endl;
-    close(clientSocket);
+    askSorting();
+    receiveAnswer();
 }
 
 addrinfo* Client::resolveServerAddress() noexcept
@@ -105,5 +87,45 @@ int Client::connectToServer(addrinfo* serverAddress) noexcept
 
 void Client::askSorting()
 {
-    std::cout << "WIP" << std::endl;
+    int messageSize;
+    // BUFFER STRUCTURE: | CHAR - type of sorting | CHAR[] - path |
+    char buffer[4096];
+    std::memset(buffer, 0, sizeof(buffer));
+    std::cout << "Please enter path on server where sort files: ";
+    std::cin.getline(buffer + sizeof(char), 4095 - sizeof(char));
+    std::cout << "Please enter sort type (NAME = 1, TYPE = 2, DATE = 3): ";
+    int sortType;
+    std::cin >> sortType;
+    std::memcpy(buffer, (void*) (&sortType), sizeof(char));
+    messageSize = write(clientSocket, buffer, strlen(buffer));
+    if (messageSize < 0)
+    {
+        std::clog << "[Error] Failed to write message to server: write(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+}
+
+void Client::receiveAnswer()
+{
+    int messageSize;
+    char buffer[4096];
+    std::memset(buffer, 0, sizeof(buffer));
+    int numberOfFiles;
+    messageSize = read(clientSocket, &numberOfFiles, sizeof(int));
+    if (messageSize < 0)
+    {
+        std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
+    }
+    std::cout << "Total number of files in folder: " << numberOfFiles << std::endl;
+    for (int i = 0; i < numberOfFiles; i++)
+    {
+        std::memset(buffer, 0, sizeof(buffer));
+        messageSize = read(clientSocket, buffer, 4095);
+        if (messageSize < 0)
+        {
+            std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
+        }
+        std::cout << "Received: " << buffer << std::endl;
+    }
+    close(clientSocket);
 }

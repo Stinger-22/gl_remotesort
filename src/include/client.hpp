@@ -23,6 +23,7 @@ private:
 	int createClientSocket(addrinfo* serverAddress) noexcept;
 	int connectToServer(addrinfo* serverAddress) noexcept;
 	void askSorting();
+	void receiveAnswer();
 };
 
 #endif

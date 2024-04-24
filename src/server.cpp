@@ -1,12 +1,18 @@
-#include <cerrno>
 #include <server.hpp>
+#include <networking.hpp>
+#include <string>
+#include <util.hpp>
 
+#include <algorithm>
+#include <filesystem>
+#include <cerrno>
 #include <iostream>
 #include <climits>
 #include <cstring>
 #include <unistd.h>
 #include <netdb.h>
-
+#include <vector>
+#include <sys/stat.h>
 
 Server::Server(const char* port)
 {
@@ -66,7 +72,7 @@ void Server::mainloop()
         {
             std::clog << "[Error] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
         }
-        echoServe(clientSocket);
+        sortServe(clientSocket);
         close(clientSocket);
     }
     // serverSocket is not closed
@@ -93,6 +99,111 @@ void Server::echoServe(int clientSocket)
     {
         std::clog << "[Error] Failed to write reply with echo: write(): " << std::system_category().message(errno) << std::endl;
         return;
+    }
+}
+
+void Server::sortServe(int clientSocket)
+{
+    int messageSize;
+    // BUFFER STRUCTURE: | CHAR - type of sorting | CHAR[] - path |
+    char buffer[4096];
+    char sortType;
+    std::memset(buffer, 0, sizeof(buffer));
+    int readSize = 0;
+    messageSize = read(clientSocket, buffer, 4095);
+    std::cout << "messageSize = " << messageSize << std::endl;
+    if (messageSize == -1)
+    {
+        std::clog << "[Error] Failed to read client's message: read(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+
+    std::memcpy((void*)(&sortType), buffer, sizeof(char));
+
+    SortingRequest::SortBy sortBy;
+    switch (sortType) {
+        case 1:
+            sortBy = SortingRequest::SortBy::NAME;
+            break;
+        case 2:
+            sortBy = SortingRequest::SortBy::TYPE;
+            break;
+        case 3:
+            sortBy = SortingRequest::SortBy::DATE;
+            break;
+        default:
+            std::cerr << "[Error] Client send wrong sorting type." << std::endl;
+            // TODO send error
+    }
+    std::vector<struct FileInfo> foundFiles = sortFiles(buffer + sizeof(char), sortBy);
+    sendResponse(clientSocket, foundFiles);
+}
+
+std::vector<struct FileInfo> Server::sortFiles(char* path, SortingRequest::SortBy sortBy)
+{
+    namespace fs = std::filesystem;
+
+    std::vector<struct FileInfo> foundFiles;
+    std::string pathString = path;
+    try
+    {
+        for (const fs::directory_entry& entry : fs::recursive_directory_iterator(pathString, fs::directory_options::skip_permission_denied))
+        {
+            if (entry.is_regular_file())
+            {
+                struct FileInfo fileInfo;
+                fileInfo.filename = remove_extension(entry.path().filename());
+                fileInfo.extension = entry.path().extension();
+                struct stat attr;
+                stat(entry.path().c_str(), &attr);
+                fileInfo.time = attr.st_mtime;
+                foundFiles.push_back(fileInfo);
+            }
+        }
+    }
+    catch(std::filesystem::filesystem_error& e)
+    {
+      // TODO failure
+    }
+
+    int (*comparators[3])(const FileInfo&, const FileInfo&);
+    comparators[0] = compareByFilename;
+    comparators[1] = compareByExtension;
+    comparators[2] = compareByTime;
+
+    std::sort(foundFiles.begin(), foundFiles.end(), comparators[sortBy]);
+    for (size_t i = 0; i < foundFiles.size(); i++)
+    {
+        struct FileInfo info = foundFiles[i];
+        std::cout << info.filename << " | " << info.extension << " | " << info.time << std::endl;
+    }
+    std::cout << '\n';
+    return foundFiles;
+}
+
+void Server::sendResponse(int clientSocket, std::vector<struct FileInfo> foundFiles)
+{
+    int messageSize;
+    int numberOfFiles = foundFiles.size();
+    char buffer[4096];
+    std::memset(buffer, 0, sizeof(buffer));
+    messageSize = write(clientSocket, &numberOfFiles, sizeof(int));
+    if (messageSize == -1)
+    {
+        std::clog << "[Error] Failed to send number of files: write(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+    for (int i = 0; i < numberOfFiles; i++)
+    {
+        std::memset(buffer, 0, sizeof(buffer));
+        std::string fileInfoStr;
+        struct FileInfo fileInfo = foundFiles[i];
+        fileInfoStr = fileInfo.filename + fileInfo.extension + " | " + std::to_string(fileInfo.time);
+        messageSize = write(clientSocket, fileInfoStr.c_str(), 4095);
+        if (messageSize < 0)
+        {
+            std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
+        }
     }
 }
 

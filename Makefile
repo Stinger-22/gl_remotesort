@@ -27,7 +27,7 @@ $(BUILDDIR)appServer.o: $(SOURCEDIR)appServer.cpp
 	@echo "Compiling: $@"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILDDIR)server.o: $(SOURCEDIR)server.cpp $(INCLUDEDIR)server.hpp
+$(BUILDDIR)server.o: $(SOURCEDIR)server.cpp $(INCLUDEDIR)server.hpp $(INCLUDEDIR)networking.hpp
 	@echo "Compiling: $@"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

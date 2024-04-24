@@ -7,13 +7,13 @@ struct SortingRequest
 {
 	enum SortBy
 	{
-		NAME,
-		TYPE,
-		DATE
+		NAME = 0,
+		TYPE = 1,
+		DATE = 2
 	};
 
-	std::string startFolder;
 	SortBy sortBy;
+	char* startFolder;
 };
 
 struct SortingResponse
@@ -36,5 +36,6 @@ struct SortingResponse
 // 		Client stops execution.
 // Server responds with Success:
 // 		Client receives number of files.
+
 
 #endif
