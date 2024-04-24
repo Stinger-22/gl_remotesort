@@ -1,6 +1,6 @@
 #include <server.hpp>
-#include <networking.hpp>
 #include <string>
+#include <system_error>
 #include <util.hpp>
 
 #include <algorithm>
@@ -72,46 +72,21 @@ void Server::mainloop()
         {
             std::clog << "[Error] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
         }
+        std::clog << "[Info] Accepted client socket" << std::endl;
         sortServe(clientSocket);
         close(clientSocket);
     }
-    // serverSocket is not closed
-}
-
-void Server::echoServe(int clientSocket)
-{
-    int messageSize;
-    char buffer[256];
-
-    std::memset(buffer, 0, sizeof(buffer));
-    // TODO Here should be reading cycle
-    messageSize = read(clientSocket, buffer, 255);
-    if (messageSize == -1)
-    {
-        std::clog << "[Error] Failed to read client's message: read(): " << std::system_category().message(errno) << std::endl;
-        return;
-    }
-    std::cout << "Received message: " << buffer << std::endl;
-
-
-    messageSize = write(clientSocket, buffer, messageSize);
-    if (messageSize == -1)
-    {
-        std::clog << "[Error] Failed to write reply with echo: write(): " << std::system_category().message(errno) << std::endl;
-        return;
-    }
+    // TODO serverSocket is not closed. Perhaps this method should be run in a new thread
 }
 
 void Server::sortServe(int clientSocket)
 {
     int messageSize;
-    // BUFFER STRUCTURE: | CHAR - type of sorting | CHAR[] - path |
     char buffer[4096];
     char sortType;
+
     std::memset(buffer, 0, sizeof(buffer));
-    int readSize = 0;
     messageSize = read(clientSocket, buffer, 4095);
-    std::cout << "messageSize = " << messageSize << std::endl;
     if (messageSize == -1)
     {
         std::clog << "[Error] Failed to read client's message: read(): " << std::system_category().message(errno) << std::endl;
@@ -119,32 +94,47 @@ void Server::sortServe(int clientSocket)
     }
 
     std::memcpy((void*)(&sortType), buffer, sizeof(char));
-
-    SortingRequest::SortBy sortBy;
+    SortBy sortBy;
     switch (sortType) {
         case 1:
-            sortBy = SortingRequest::SortBy::NAME;
+            sortBy = SortBy::NAME;
             break;
         case 2:
-            sortBy = SortingRequest::SortBy::TYPE;
+            sortBy = SortBy::TYPE;
             break;
         case 3:
-            sortBy = SortingRequest::SortBy::DATE;
+            sortBy = SortBy::DATE;
             break;
         default:
-            std::cerr << "[Error] Client send wrong sorting type." << std::endl;
-            // TODO send error
+            std::clog << "[Error] Client send wrong sorting type." << std::endl;
+            sendResponseFailure(clientSocket, SortingResult::FAILURE_WRONG_SORT_TYPE);
+            return;
     }
-    std::vector<struct FileInfo> foundFiles = sortFiles(buffer + sizeof(char), sortBy);
-    sendResponse(clientSocket, foundFiles);
+
+    SortingResult result;
+    std::vector<struct FileInfo> foundFiles = sortFiles(buffer + sizeof(char), sortBy, &result);
+    if (result == SUCCESS)
+    {
+        sendResponseSuccess(clientSocket, foundFiles);
+    }
+    else
+    {
+        sendResponseFailure(clientSocket, result);
+    }
 }
 
-std::vector<struct FileInfo> Server::sortFiles(char* path, SortingRequest::SortBy sortBy)
+std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult *result)
 {
+    std::clog << "[Info] Sorting files in: " << path << " by " << sortBy << std::endl;
     namespace fs = std::filesystem;
-
     std::vector<struct FileInfo> foundFiles;
     std::string pathString = path;
+    if (std::filesystem::is_directory(path) == false)
+    {
+        *result = FAILURE_PATH_IS_NOT_DIRECTORY;
+        std::clog << "[Error] Sorting files failed. Received path is not directory." << std::endl;
+        return foundFiles;
+    }
     try
     {
         for (const fs::directory_entry& entry : fs::recursive_directory_iterator(pathString, fs::directory_options::skip_permission_denied))
@@ -161,27 +151,19 @@ std::vector<struct FileInfo> Server::sortFiles(char* path, SortingRequest::SortB
             }
         }
     }
-    catch(std::filesystem::filesystem_error& e)
+    catch (std::filesystem::filesystem_error& e)
     {
-      // TODO failure
+        std::clog << "[Error] sortFiles(): " << e.what() << std::endl;
     }
 
-    int (*comparators[3])(const FileInfo&, const FileInfo&);
-    comparators[0] = compareByFilename;
-    comparators[1] = compareByExtension;
-    comparators[2] = compareByTime;
-
+    extern int (*comparators[3])(const FileInfo&, const FileInfo&);
     std::sort(foundFiles.begin(), foundFiles.end(), comparators[sortBy]);
-    for (size_t i = 0; i < foundFiles.size(); i++)
-    {
-        struct FileInfo info = foundFiles[i];
-        std::cout << info.filename << " | " << info.extension << " | " << info.time << std::endl;
-    }
-    std::cout << '\n';
+    *result = SUCCESS;
+    std::clog << "[Info] Sorting files finished." << std::endl;
     return foundFiles;
 }
 
-void Server::sendResponse(int clientSocket, std::vector<struct FileInfo> foundFiles)
+void Server::sendResponseSuccess(int clientSocket, std::vector<struct FileInfo> foundFiles)
 {
     int messageSize;
     int numberOfFiles = foundFiles.size();
@@ -205,6 +187,19 @@ void Server::sendResponse(int clientSocket, std::vector<struct FileInfo> foundFi
             std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
         }
     }
+    std::clog << "[Info] Sent the client a response about the success." << std::endl;
+}
+
+void Server::sendResponseFailure(int clientSocket, SortingResult result)
+{
+    int messageSize;
+    messageSize = write(clientSocket, &result, sizeof(SortingResult));
+    if (messageSize == -1)
+    {
+        std::clog << "[Error] Failed to send error: write(): " << std::system_category().message(errno) << std::endl;
+        return;
+    }
+    std::clog << "[Info] Sent a response to the client about the failure." << std::endl;
 }
 
 addrinfo* Server::getServerAddresses() noexcept

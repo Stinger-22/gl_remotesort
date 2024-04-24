@@ -5,6 +5,10 @@
 #include <cstdio>
 #include <ctime>
 
+int (*comparators[3])(const FileInfo&, const FileInfo&) =
+{
+	compareByFilename, compareByExtension, compareByTime
+};
 
 std::string remove_extension(const std::string& filename)
 {

@@ -1,5 +1,5 @@
-#include "util.hpp"
 #include <client.hpp>
+#include <util.hpp>
 
 #include <cstring>
 #include <iostream>
@@ -12,8 +12,6 @@ Client::~Client()
 
 void Client::request()
 {
-    std::cout << "askSorting" << std::endl;
-
     addrinfo* serverAddress = resolveServerAddress();
     if (serverAddress == nullptr)
     {
@@ -42,7 +40,7 @@ addrinfo* Client::resolveServerAddress() noexcept
 {
     std::clog << "[Debug] Resolving server address.\n";
     addrinfo hints, *serverAddress;
-    memset(&hints, 0, sizeof(hints));
+    std::memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
@@ -88,7 +86,6 @@ int Client::connectToServer(addrinfo* serverAddress) noexcept
 void Client::askSorting()
 {
     int messageSize;
-    // BUFFER STRUCTURE: | CHAR - type of sorting | CHAR[] - path |
     char buffer[4096];
     std::memset(buffer, 0, sizeof(buffer));
     std::cout << "Please enter path on server where sort files: ";
@@ -116,6 +113,24 @@ void Client::receiveAnswer()
     {
         std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
     }
+
+    if (numberOfFiles < 0)
+    {
+        std::cout << "Server failed to sort files" << std::endl;
+        switch (numberOfFiles)
+        {
+            case SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY:
+                std::cout << "You typed path which is not a directory." << std::endl;
+                break;
+            case SortingResult::FAILURE_WRONG_SORT_TYPE:
+                std::cout << "You typed unknown sorting type." << std::endl;
+                break;
+            default:
+                std::cout << "Unknown error" << std::endl;
+        }
+        return;
+    }
+
     std::cout << "Total number of files in folder: " << numberOfFiles << std::endl;
     for (int i = 0; i < numberOfFiles; i++)
     {

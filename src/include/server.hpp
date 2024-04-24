@@ -1,7 +1,7 @@
 #ifndef REMOTESORT_SERVER_HPP
 #define REMOTESORT_SERVER_HPP
 
-#include <networking.hpp>
+#include <util.hpp>
 
 #include <string>
 #include <vector>
@@ -33,8 +33,9 @@ private:
     void mainloop();
     void echoServe(int clientSocket);
     void sortServe(int clientSocket);
-    std::vector<struct FileInfo> sortFiles(char* path, SortingRequest::SortBy sortBy);
-    void sendResponse(int clientSocket, std::vector<struct FileInfo> foundFiles);
+    std::vector<struct FileInfo> sortFiles(char* path, SortBy sortBy, SortingResult *result);
+    void sendResponseSuccess(int clientSocket, std::vector<struct FileInfo> foundFiles);
+    void sendResponseFailure(int clientSocket, SortingResult result);
 };
 
 #endif
