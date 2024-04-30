@@ -4,14 +4,14 @@
 #include <string>
 #include <ctime>
 
-enum class SortBy
+enum class SortBy : int
 {
     NAME = 0,
     TYPE = 1,
     DATE = 2
 };
 
-enum class SortingResult
+enum class SortingResult : int
 {
     FAILURE_WRONG_SORT_TYPE = -3,
     FAILURE_PATH_IS_NOT_DIRECTORY = -2,
@@ -26,7 +26,6 @@ struct FileInfo
     std::time_t time;
 };
 
-std::string remove_extension(const std::string& filename);
 int compareByFilename(const FileInfo& left, const FileInfo& right);
 int compareByExtension(const FileInfo& left, const FileInfo& right);
 int compareByTime(const FileInfo& left, const FileInfo& right);

@@ -1,3 +1,4 @@
+#include <optional>
 #include <server.hpp>
 #include <string>
 #include <system_error>
@@ -14,6 +15,8 @@
 #include <vector>
 #include <sys/stat.h>
 
+Server::~Server() = default;
+
 Server::Server(const char* port)
 {
     this->port = port;
@@ -22,27 +25,24 @@ Server::Server(const char* port)
     this->hostname = hostname;
 }
 
-Server::~Server()
-{
-
-}
-
 int Server::start()
 {
-    addrinfo* serverAddresses = getServerAddresses();
-    if (serverAddresses == nullptr)
+    std::optional<addrinfo*> serverAddresses = getServerAddresses();
+    if (serverAddresses.has_value() == false)
     {
         return -1;
     }
 
-    serverSocket = createServerSocket(serverAddresses);
-    if (serverSocket == -1)
+    std::optional<int> serverSocket = createServerSocket(serverAddresses.value());
+    if (serverSocket.has_value() == false)
     {
         return -1;
     }
+    this->serverSocket = serverSocket.value();
 
     // WARNING: User have to remember to free this. Maybe should create wrapper class
-    freeaddrinfo(serverAddresses);
+    // TODO make custom destructor and use unique_ptr
+    freeaddrinfo(serverAddresses.value());
 
     mainloop();
     // Can't return 0 cause server is running in the same thread.
@@ -122,13 +122,13 @@ void Server::sortServe(int clientSocket)
     }
 }
 
-std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult *result)
+std::vector<FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult *result)
 {
     std::clog << "[Info] Sorting files in: " << path << " by " << int(sortBy) << std::endl;
     namespace fs = std::filesystem;
-    std::vector<struct FileInfo> foundFiles;
+    std::vector<FileInfo> foundFiles;
     std::string pathString = path;
-    if (std::filesystem::is_directory(path) == false)
+    if (fs::is_directory(path) == false)
     {
         *result = SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY;
         std::clog << "[Error] Sorting files failed. Received path is not directory." << std::endl;
@@ -141,8 +141,9 @@ std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, Sortin
             if (entry.is_regular_file())
             {
                 struct FileInfo fileInfo;
-                fileInfo.filename = remove_extension(entry.path().filename());
+                fileInfo.filename = entry.path().stem();
                 fileInfo.extension = entry.path().extension();
+                // fileInfo.time = fs::last_write_time(entry.path())
                 struct stat attr;
                 stat(entry.path().c_str(), &attr);
                 fileInfo.time = attr.st_mtime;
@@ -162,12 +163,11 @@ std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, Sortin
     return foundFiles;
 }
 
-void Server::sendResponseSuccess(int clientSocket, std::vector<struct FileInfo> foundFiles)
+void Server::sendResponseSuccess(int clientSocket, std::vector<FileInfo> &foundFiles)
 {
     int messageSize;
     int numberOfFiles = foundFiles.size();
-    char buffer[4096];
-    std::memset(buffer, 0, sizeof(buffer));
+    char buffer[4096] = {0};
     messageSize = write(clientSocket, &numberOfFiles, sizeof(int));
     if (messageSize == -1)
     {
@@ -201,29 +201,28 @@ void Server::sendResponseFailure(int clientSocket, SortingResult result)
     std::clog << "[Info] Sent a response to the client about the failure." << std::endl;
 }
 
-addrinfo* Server::getServerAddresses() noexcept
+std::optional<addrinfo*> Server::getServerAddresses() noexcept
 {
-    addrinfo hints, *serverAddress;
-    memset(&hints, 0, sizeof(hints));
+    std::clog << "[Debug] Resolving server hostname.\n";
+    addrinfo hints = {0}, *serverAddress;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    std::clog << "[Debug] Resolving server hostname.\n";
     if (getaddrinfo(hostname.c_str(), port.c_str(), &hints, &serverAddress) != 0)
     {
         std::clog << "[Error] Failed to resolve server's local address: getaddrinfo(): " << std::system_category().message(errno) << std::endl;
-        return nullptr;
+        return std::nullopt;
     }
 
     return serverAddress;
 }
 
-int Server::createServerSocket(addrinfo* serverAddress) noexcept
+std::optional<int> Server::createServerSocket(addrinfo* serverAddress) noexcept
 {
     if (serverAddress == nullptr)
     {
         std::clog << "[Error] createServerSocket(): serverAddress is nullptr." << std::endl;
-        return -1;
+        return std::nullopt;
     }
 
     std::clog << "[Debug] Creating server socket object.\n";
@@ -233,20 +232,20 @@ int Server::createServerSocket(addrinfo* serverAddress) noexcept
     if (serverSocket == -1)
     {
         std::clog << "[Error] Failed to create server socket: socket(): " << std::system_category().message((errno)) << std::endl;
-        return -1;
+        return std::nullopt;
     }
 
     std::clog << "[Debug] Binding socket to the resolved address." << std::endl;
     if (bind(serverSocket, serverAddress->ai_addr, serverAddress->ai_addrlen) == -1)
     {
         std::clog << "[Error] Failed to bind server socket to address " << hostname << ":" << port << " : bind(): " << std::system_category().message((errno)) << std::endl;
-        return -1;
+        return std::nullopt;
     }
 
     std::clog << "[Debug] Activating server listenning mode.\n";
     if (listen(serverSocket, WAITING_REQUESTS) == -1){
         std::clog << "[Error] Failed to activate socket listenner: listen(): " << std::system_category().message((errno)) << std::endl;
-        return -1;
+        return std::nullopt;
     }
     std::clog << "[Info] Server is listenning for incoming connections at " << hostname << ":" << port << std::endl;
     return serverSocket;

@@ -5,10 +5,7 @@
 #include <iostream>
 #include <unistd.h>
 
-Client::~Client()
-{
-
-}
+Client::~Client() = default;
 
 void Client::request()
 {
@@ -126,7 +123,6 @@ void Client::receiveAnswer()
             default:
                 std::cout << "Unknown error" << std::endl;
         }
-        close(clientSocket);
         return;
     }
 

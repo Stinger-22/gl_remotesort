@@ -9,7 +9,7 @@ BUILDDIR  = ./build/
 all: server client
 	@echo "Build successful!"
 
-server: $(BUILDDIR)appServer.o $(BUILDDIR)util.o $(BUILDDIR)server.o
+server: $(BUILDDIR)appServer.o $(BUILDDIR)server.o $(BUILDDIR)socket.o $(BUILDDIR)util.o
 	@echo "Building: $@"
 	$(CXX) $(CXXFLAGS) -o $@ $^
 	@echo "Build finished: $@"
