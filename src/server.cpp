@@ -82,10 +82,9 @@ void Server::mainloop()
 void Server::sortServe(int clientSocket)
 {
     int messageSize;
-    char buffer[4096];
+    char buffer[4096] = {0};
     char sortType;
 
-    std::memset(buffer, 0, sizeof(buffer));
     messageSize = read(clientSocket, buffer, 4095);
     if (messageSize == -1)
     {
@@ -113,7 +112,7 @@ void Server::sortServe(int clientSocket)
 
     SortingResult result;
     std::vector<struct FileInfo> foundFiles = sortFiles(buffer + sizeof(char), sortBy, &result);
-    if (result == SUCCESS)
+    if (result == SortingResult::SUCCESS)
     {
         sendResponseSuccess(clientSocket, foundFiles);
     }
@@ -125,13 +124,13 @@ void Server::sortServe(int clientSocket)
 
 std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult *result)
 {
-    std::clog << "[Info] Sorting files in: " << path << " by " << sortBy << std::endl;
+    std::clog << "[Info] Sorting files in: " << path << " by " << int(sortBy) << std::endl;
     namespace fs = std::filesystem;
     std::vector<struct FileInfo> foundFiles;
     std::string pathString = path;
     if (std::filesystem::is_directory(path) == false)
     {
-        *result = FAILURE_PATH_IS_NOT_DIRECTORY;
+        *result = SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY;
         std::clog << "[Error] Sorting files failed. Received path is not directory." << std::endl;
         return foundFiles;
     }
@@ -157,8 +156,8 @@ std::vector<struct FileInfo> Server::sortFiles(char* path, SortBy sortBy, Sortin
     }
 
     extern int (*comparators[3])(const FileInfo&, const FileInfo&);
-    std::sort(foundFiles.begin(), foundFiles.end(), comparators[sortBy]);
-    *result = SUCCESS;
+    std::sort(foundFiles.begin(), foundFiles.end(), comparators[int(sortBy)]);
+    *result = SortingResult::SUCCESS;
     std::clog << "[Info] Sorting files finished." << std::endl;
     return foundFiles;
 }

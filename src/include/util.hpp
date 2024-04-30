@@ -4,19 +4,19 @@
 #include <string>
 #include <ctime>
 
-enum SortBy
+enum class SortBy
 {
     NAME = 0,
     TYPE = 1,
     DATE = 2
 };
 
-enum SortingResult
+enum class SortingResult
 {
-    SUCCESS,
-    FAILURE = -1,
+    FAILURE_WRONG_SORT_TYPE = -3,
     FAILURE_PATH_IS_NOT_DIRECTORY = -2,
-    FAILURE_WRONG_SORT_TYPE = -3
+    FAILURE = -1,
+    SUCCESS = 0
 };
 
 struct FileInfo

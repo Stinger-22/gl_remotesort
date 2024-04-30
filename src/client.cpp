@@ -34,13 +34,13 @@ void Client::request()
 
     askSorting();
     receiveAnswer();
+    close(clientSocket);
 }
 
 addrinfo* Client::resolveServerAddress() noexcept
 {
     std::clog << "[Debug] Resolving server address.\n";
-    addrinfo hints, *serverAddress;
-    std::memset(&hints, 0, sizeof(hints));
+    addrinfo hints = {0}, *serverAddress;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
@@ -86,8 +86,7 @@ int Client::connectToServer(addrinfo* serverAddress) noexcept
 void Client::askSorting()
 {
     int messageSize;
-    char buffer[4096];
-    std::memset(buffer, 0, sizeof(buffer));
+    char buffer[4096] = {0};
     std::cout << "Please enter path on server where sort files: ";
     std::cin.getline(buffer + sizeof(char), 4095 - sizeof(char));
     std::cout << "Please enter sort type (NAME = 1, TYPE = 2, DATE = 3): ";
@@ -105,8 +104,7 @@ void Client::askSorting()
 void Client::receiveAnswer()
 {
     int messageSize;
-    char buffer[4096];
-    std::memset(buffer, 0, sizeof(buffer));
+    char buffer[4096] = {0};
     int numberOfFiles;
     messageSize = read(clientSocket, &numberOfFiles, sizeof(int));
     if (messageSize < 0)
@@ -119,15 +117,16 @@ void Client::receiveAnswer()
         std::cout << "Server failed to sort files" << std::endl;
         switch (numberOfFiles)
         {
-            case SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY:
+            case int(SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY):
                 std::cout << "You typed path which is not a directory." << std::endl;
                 break;
-            case SortingResult::FAILURE_WRONG_SORT_TYPE:
+            case int(SortingResult::FAILURE_WRONG_SORT_TYPE):
                 std::cout << "You typed unknown sorting type." << std::endl;
                 break;
             default:
                 std::cout << "Unknown error" << std::endl;
         }
+        close(clientSocket);
         return;
     }
 
@@ -142,5 +141,4 @@ void Client::receiveAnswer()
         }
         std::cout << "Received: " << buffer << std::endl;
     }
-    close(clientSocket);
 }
