@@ -1,5 +1,7 @@
 #include <server.hpp>
 #include <socket.hpp>
+#include <sys/select.h>
+#include <sys/socket.h>
 #include <util.hpp>
 
 #include <iostream>
@@ -17,10 +19,20 @@ Server::Server(const char* port)
     this->port = port;
 }
 
+Server::~Server()
+{
+    shutdown();
+}
+
 int Server::start()
 {
+    std::clog << "[Info] Starting the server...\n";
     this->serverSocket = std::move(Socket(hostname.c_str(), port.c_str()));
     if (serverSocket.getState() == Socket::State::FAILED)
+    {
+        return -1;
+    }
+    if (serverSocket.setNonBlockingMode() == -1)
     {
         return -1;
     }
@@ -42,23 +54,37 @@ int Server::start()
 
 void Server::shutdown()
 {
-    std::cerr << "[Info] Shutting down the server...\n";
+    std::clog << "[Info] Shutting down the server...\n";
     serverSocket.close();
-    std::cerr << "[Info] Server is shut down." << std::endl;
+    std::clog << "[Info] Server is shut down." << std::endl;
 }
 
 
 void Server::mainloop()
 {
-    while (1)
+    std::clog << "[Info] Server is waiting for requests...\n";
+    // struct timeval timeout = {NULL, NULL};
+    while (running.load())
     {
-        Socket client = serverSocket.accept();
-        if (client.getState() != Socket::State::ACCEPTED)
+        // Also can use select
+        Socket* client = serverSocket.accept();
+        if (client == nullptr)
         {
-            std::clog << "[Error] Couldn't accept client socket: mainloop()." << std::endl;
+            if (errno == EWOULDBLOCK || errno == EAGAIN)
+            {
+                // std::cout << "No available sockets to accept\n";
+            }
+            else
+            {
+                std::clog << "[Error] Couldn't accept client socket: mainloop()." << std::endl;
+            }
         }
-        std::clog << "[Info] Accepted client socket" << std::endl;
-        sortServe(client);
+        else
+        {
+            std::clog << "[Info] Accepted client socket" << std::endl;
+            sortServe(*client);
+        }
+        delete client;
     }
     // TODO this method should be run in a new thread
 }

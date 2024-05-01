@@ -1,3 +1,4 @@
+#include <optional>
 #include <socket.hpp>
 
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <string_view>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 //                           IPv4     TCP
 addrinfo Socket::hints = {0, AF_INET, SOCK_STREAM};
@@ -50,6 +52,7 @@ Socket::Socket(Socket &&other): socketFD(other.socketFD), state(other.state), ad
 
 Socket::~Socket()
 {
+    std::clog << "[Debug] [Socket " << socketFD << "] DTOR." << std::endl;
     if (addresses != nullptr)
     {
         freeaddrinfo(addresses);
@@ -125,16 +128,25 @@ int Socket::listen(const int waitingRequests)
     return listenResult;
 }
 
-Socket Socket::accept()
+Socket* Socket::accept()
 {
     struct sockaddr_in address;
     socklen_t size = sizeof(address);
     int socket = ::accept(socketFD, (struct sockaddr *) &address, &size);
     if (socket == -1)
     {
-        std::clog << "[Error] [Socket " << socketFD << "] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
+        if (errno == EWOULDBLOCK || errno == EAGAIN)
+        {
+            // std::cout << "No available sockets to accept\n";
+        }
+        else
+        {
+            std::clog << "[Error] [Socket " << socketFD << "] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
+        }
+        return nullptr;
     }
-    return Socket(socket, address, size);
+    std::cout << "SocketFD = " << socket << std::endl;
+    return new Socket(socket, address, size);
 }
 
 int Socket::connect()
@@ -187,6 +199,16 @@ int Socket::write(const void *buffer, size_t nbytes)
         return -1;
     }
     return ::write(socketFD, buffer, nbytes);
+}
+
+int Socket::setNonBlockingMode()
+{
+    int status = fcntl(socketFD, F_SETFL, fcntl(socketFD, F_GETFL, 0) | O_NONBLOCK);
+    if (status == -1)
+    {
+        std::clog << "[Error] [Socket " << socketFD << "] Failed to set socket to non-blocking mode: fcntl(): " << std::system_category().message(errno) << std::endl;
+    }
+    return status;
 }
 
 Socket::Socket(const int socketFD, sockaddr_in address, socklen_t size)

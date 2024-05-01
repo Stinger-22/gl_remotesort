@@ -9,15 +9,17 @@ class Socket
 {
 public:
     enum class State;
-    int socketFD = -1;
 private:
     static addrinfo hints;
 
+    int socketFD = -1;
     State state = Socket::State::UNINITIALIZED;
     addrinfo* addresses = nullptr;
 public:
     Socket() = default;
     Socket(const char* hostname, const char* port);
+    Socket(const Socket& other) = delete;
+    Socket& operator=(const Socket& other) = delete;
     Socket& operator=(Socket &&other);
     Socket(Socket &&other);
     ~Socket();
@@ -26,9 +28,11 @@ public:
     int write(const void *buffer, size_t nbytes);
     int bind();
     int listen(const int waitingRequests);
-    Socket accept();
+    Socket* accept();
     int connect();
     int close();
+    int setNonBlockingMode();
+
     State getState() const;
 
     std::string getHostname() const;
