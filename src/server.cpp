@@ -2,14 +2,14 @@
 #include <socket.hpp>
 #include <util.hpp>
 
-#include <system_error>
-#include <string>
-#include <algorithm>
-#include <filesystem>
-#include <cerrno>
 #include <iostream>
+#include <string>
 #include <cstring>
+#include <filesystem>
+#include <system_error>
+#include <cerrno>
 #include <vector>
+#include <algorithm>
 
 Server::Server(const char* port)
 {
@@ -43,7 +43,7 @@ int Server::start()
 void Server::shutdown()
 {
     std::cerr << "[Info] Shutting down the server...\n";
-    // ... TODO close serverSocket
+    serverSocket.close();
     std::cerr << "[Info] Server is shut down." << std::endl;
 }
 
@@ -55,12 +55,12 @@ void Server::mainloop()
         Socket client = serverSocket.accept();
         if (client.getState() != Socket::State::ACCEPTED)
         {
-            std::clog << "[Error] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
+            std::clog << "[Error] Couldn't accept client socket: mainloop()." << std::endl;
         }
         std::clog << "[Info] Accepted client socket" << std::endl;
         sortServe(client);
     }
-    // TODO serverSocket is not closed. Perhaps this method should be run in a new thread
+    // TODO this method should be run in a new thread
 }
 
 void Server::sortServe(Socket &clientSocket)
@@ -137,6 +137,7 @@ std::vector<FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult
 
 void Server::sendResponseSuccess(Socket &clientSocket, std::vector<FileInfo> &foundFiles)
 {
+    // TODO make this better
     int messageSize;
     int numberOfFiles = foundFiles.size();
     char buffer[4096] = {0};

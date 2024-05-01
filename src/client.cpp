@@ -1,10 +1,9 @@
 #include <client.hpp>
-#include <util.hpp>
 #include <socket.hpp>
+#include <util.hpp>
 
-#include <cstring>
 #include <iostream>
-#include <unistd.h>
+#include <cstring>
 
 Client::Client(const char* serverHostname, const char* port): serverHostname(serverHostname), port(port) {};
 

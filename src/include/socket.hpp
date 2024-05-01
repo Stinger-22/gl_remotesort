@@ -42,8 +42,8 @@ private:
     std::optional<addrinfo*> receiveAddresses(std::string_view hostname, std::string_view port) noexcept;
     std::optional<int> createSocketFD(addrinfo* address) noexcept;
 
-    std::string getHostname(struct sockaddr *sa, socklen_t size) const;
-    unsigned short getPort(struct sockaddr *s) const;
+    std::string getHostname(sockaddr *sa, socklen_t size) const;
+    unsigned short getPort(sockaddr *s) const;
 public:
     enum class State
     {
@@ -56,6 +56,8 @@ public:
         ACCEPTED,
         CLOSED
     };
+
+    friend std::ostream& operator<< (std::ostream& os, Socket::State state);
 };
 
 #endif

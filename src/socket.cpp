@@ -73,7 +73,7 @@ std::optional<addrinfo*> Socket::receiveAddresses(std::string_view hostname, std
     }
     if (addresses->ai_next)
     {
-        std::clog << "[Debug] Found multiple addresses.\n";
+        std::clog << "[Debug] Found multiple addresses. This app selects automatically the first address.\n";
     }
     return addresses;
 }
@@ -173,7 +173,7 @@ int Socket::read(void *buffer, size_t nbytes)
 {
     if ((state != State::ACCEPTED) && (state != State::CONNECTED))
     {
-        std::clog << "[Error] [Socket " << socketFD << "] Can't read in the " << int(state) << " state." << std::endl;
+        std::clog << "[Error] [Socket " << socketFD << "] Can't read in the " << state << " state." << std::endl;
         return -1;
     }
     return ::read(socketFD, buffer, nbytes);
@@ -183,7 +183,7 @@ int Socket::write(const void *buffer, size_t nbytes)
 {
     if ((state != State::ACCEPTED) && (state != State::CONNECTED))
     {
-        std::clog << "[Error] [Socket " << socketFD << "] Can't write in the " << int(state) << " state." << std::endl;
+        std::clog << "[Error] [Socket " << socketFD << "] Can't write in the " << state << " state." << std::endl;
         return -1;
     }
     return ::write(socketFD, buffer, nbytes);
@@ -256,7 +256,7 @@ void Socket::printPort() const
     std::clog << "[Info] [Socket " << socketFD << "] Port: " << getPort() << std::endl;
 }
 
-std::string Socket::getHostname(struct sockaddr *s, socklen_t size) const
+std::string Socket::getHostname(sockaddr *s, socklen_t size) const
 {
     char addressHostname[NI_MAXHOST];
     if (getnameinfo(s, size, addressHostname, sizeof(addressHostname), nullptr, 0, NI_NAMEREQD))
@@ -266,7 +266,23 @@ std::string Socket::getHostname(struct sockaddr *s, socklen_t size) const
     return addressHostname;
 }
 
-unsigned short Socket::getPort(struct sockaddr *s) const
+unsigned short Socket::getPort(sockaddr *s) const
 {
     return ntohs(((sockaddr_in*)s)->sin_port);
+}
+
+std::ostream& operator<< (std::ostream& os, Socket::State state)
+{
+    switch (state)
+    {
+        case Socket::State::FAILED: return os << "FAILED";
+        case Socket::State::UNINITIALIZED: return os << "UNINITIALIZED";
+        case Socket::State::CREATED: return os << "CREATED";
+        case Socket::State::BOUND: return os << "BOUND";
+        case Socket::State::LISTENING: return os << "LISTENING";
+        case Socket::State::CONNECTED: return os << "CONNECTED";
+        case Socket::State::ACCEPTED: return os << "ACCEPTED";
+        case Socket::State::CLOSED: return os << "CLOSED";
+    };
+    return os << static_cast<int>(state);
 }
