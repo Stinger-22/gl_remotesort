@@ -5,7 +5,7 @@
 #include <iostream>
 #include <unistd.h>
 
-Client::~Client() = default;
+Client::Client(const char* serverHostname, const char* port): serverHostname(serverHostname), port(port) {};
 
 void Client::request()
 {
@@ -86,7 +86,7 @@ void Client::askSorting()
     char buffer[4096] = {0};
     std::cout << "Please enter path on server where sort files: ";
     std::cin.getline(buffer + sizeof(char), 4095 - sizeof(char));
-    std::cout << "Please enter sort type (NAME = 1, TYPE = 2, DATE = 3): ";
+    std::cout << "Please enter sort type (NAME = 0, TYPE = 1, DATE = 2): ";
     int sortType;
     std::cin >> sortType;
     std::memcpy(buffer, (void*) (&sortType), sizeof(char));
@@ -121,7 +121,7 @@ void Client::receiveAnswer()
                 std::cout << "You typed unknown sorting type." << std::endl;
                 break;
             default:
-                std::cout << "Unknown error" << std::endl;
+                std::cout << "Unknown error." << std::endl;
         }
         return;
     }

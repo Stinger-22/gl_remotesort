@@ -26,10 +26,14 @@ struct FileInfo
     std::time_t time;
 };
 
+extern int (*comparators[3])(const FileInfo&, const FileInfo&);
+
 int compareByFilename(const FileInfo& left, const FileInfo& right);
 int compareByExtension(const FileInfo& left, const FileInfo& right);
 int compareByTime(const FileInfo& left, const FileInfo& right);
 
-extern int (*comparators[3])(const FileInfo&, const FileInfo&);
+std::time_t getFileLastWriteTime(const char *file);
+
+std::string getHostName();
 
 #endif

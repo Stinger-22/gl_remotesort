@@ -13,8 +13,8 @@ private:
 	int clientSocket;
 
 public:
-	Client(const char* serverHostname, const char* port): serverHostname(serverHostname), port(port) {};
-	~Client();
+	Client(const char* serverHostname, const char* port);
+	~Client() = default;
 
 
 	void request();

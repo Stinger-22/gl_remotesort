@@ -1,13 +1,11 @@
 #ifndef REMOTESORT_SERVER_HPP
 #define REMOTESORT_SERVER_HPP
 
-#include <optional>
+#include <socket.hpp>
 #include <util.hpp>
 
 #include <string>
 #include <vector>
-#include <netdb.h>
-
 
 class Server
 {
@@ -17,11 +15,10 @@ private:
     std::string hostname;
     std::string port;
 
-    int serverSocket;
-
+    Socket serverSocket;
 public:
     Server(const char* port);
-    ~Server();
+    ~Server() = default;
 
     int start();
     void shutdown();
@@ -29,14 +26,11 @@ public:
     Server(const Server& other) = delete;
     Server& operator=(const Server& other) = delete;
 private:
-    std::optional<addrinfo*> getServerAddresses() noexcept;
-    std::optional<int> createServerSocket(addrinfo* serverAddress) noexcept;
-
     void mainloop();
-    void sortServe(int clientSocket);
+    void sortServe(Socket &clientSocket);
     std::vector<FileInfo> sortFiles(char* path, SortBy sortBy, SortingResult *result);
-    void sendResponseSuccess(int clientSocket, std::vector<FileInfo> &foundFiles);
-    void sendResponseFailure(int clientSocket, SortingResult result);
+    void sendResponseSuccess(Socket &clientSocket, std::vector<FileInfo> &foundFiles);
+    void sendResponseFailure(Socket &clientSocket, SortingResult result);
 };
 
 #endif

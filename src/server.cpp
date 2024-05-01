@@ -1,49 +1,41 @@
-#include <optional>
 #include <server.hpp>
-#include <string>
-#include <system_error>
+#include <socket.hpp>
 #include <util.hpp>
 
+#include <system_error>
+#include <string>
 #include <algorithm>
 #include <filesystem>
 #include <cerrno>
 #include <iostream>
-#include <climits>
 #include <cstring>
-#include <unistd.h>
-#include <netdb.h>
 #include <vector>
-#include <sys/stat.h>
-
-Server::~Server() = default;
 
 Server::Server(const char* port)
 {
+    this->hostname = getHostName();
     this->port = port;
-    char hostname[HOST_NAME_MAX + 1] = {0};
-    gethostname(hostname, HOST_NAME_MAX);
-    this->hostname = hostname;
 }
 
 int Server::start()
 {
-    std::optional<addrinfo*> serverAddresses = getServerAddresses();
-    if (serverAddresses.has_value() == false)
+    this->serverSocket = std::move(Socket(hostname.c_str(), port.c_str()));
+    if (serverSocket.getState() == Socket::State::FAILED)
+    {
+        return -1;
+    }
+    if (serverSocket.bind() == -1)
+    {
+        return -1;
+    }
+    if (serverSocket.listen(WAITING_REQUESTS) == -1)
     {
         return -1;
     }
 
-    std::optional<int> serverSocket = createServerSocket(serverAddresses.value());
-    if (serverSocket.has_value() == false)
-    {
-        return -1;
-    }
-    this->serverSocket = serverSocket.value();
-
-    // WARNING: User have to remember to free this. Maybe should create wrapper class
-    // TODO make custom destructor and use unique_ptr
-    freeaddrinfo(serverAddresses.value());
-
+    serverSocket.printHostname();
+    serverSocket.printIP();
+    serverSocket.printPort();
     mainloop();
     // Can't return 0 cause server is running in the same thread.
 }
@@ -51,63 +43,45 @@ int Server::start()
 void Server::shutdown()
 {
     std::cerr << "[Info] Shutting down the server...\n";
-    if (close(serverSocket) == -1)
-    {
-        std::clog << "[Error] Failed to close serverSocket: close(): " << std::system_category().message(errno) << std::endl;
-        exit(-1);
-    }
+    // ... TODO close serverSocket
     std::cerr << "[Info] Server is shut down." << std::endl;
 }
 
 
 void Server::mainloop()
 {
-    struct sockaddr_in clientAddress;
-    socklen_t clientSize = sizeof(clientAddress);;
-    int clientSocket;
     while (1)
     {
-        clientSocket = accept(serverSocket, (struct sockaddr *) &clientAddress, &clientSize);
-        if (clientSocket == -1)
+        Socket client = serverSocket.accept();
+        if (client.getState() != Socket::State::ACCEPTED)
         {
             std::clog << "[Error] Failed to accept socket: accept(): " << std::system_category().message(errno) << std::endl;
         }
         std::clog << "[Info] Accepted client socket" << std::endl;
-        sortServe(clientSocket);
-        close(clientSocket);
+        sortServe(client);
     }
     // TODO serverSocket is not closed. Perhaps this method should be run in a new thread
 }
 
-void Server::sortServe(int clientSocket)
+void Server::sortServe(Socket &clientSocket)
 {
     int messageSize;
     char buffer[4096] = {0};
-    char sortType;
 
-    messageSize = read(clientSocket, buffer, 4095);
+    messageSize = clientSocket.read(buffer, 4095);
     if (messageSize == -1)
     {
         std::clog << "[Error] Failed to read client's message: read(): " << std::system_category().message(errno) << std::endl;
         return;
     }
 
-    std::memcpy((void*)(&sortType), buffer, sizeof(char));
     SortBy sortBy;
-    switch (sortType) {
-        case 1:
-            sortBy = SortBy::NAME;
-            break;
-        case 2:
-            sortBy = SortBy::TYPE;
-            break;
-        case 3:
-            sortBy = SortBy::DATE;
-            break;
-        default:
-            std::clog << "[Error] Client send wrong sorting type." << std::endl;
-            sendResponseFailure(clientSocket, SortingResult::FAILURE_WRONG_SORT_TYPE);
-            return;
+    std::memcpy((void*)(&sortBy), buffer, sizeof(char));
+    if (int(sortBy) < 0 || int(sortBy) > 2)
+    {
+        std::clog << "[Error] Client send wrong sorting type." << std::endl;
+        sendResponseFailure(clientSocket, SortingResult::FAILURE_WRONG_SORT_TYPE);
+        return;
     }
 
     SortingResult result;
@@ -127,7 +101,7 @@ std::vector<FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult
     std::clog << "[Info] Sorting files in: " << path << " by " << int(sortBy) << std::endl;
     namespace fs = std::filesystem;
     std::vector<FileInfo> foundFiles;
-    std::string pathString = path;
+    std::string_view pathString = path;
     if (fs::is_directory(path) == false)
     {
         *result = SortingResult::FAILURE_PATH_IS_NOT_DIRECTORY;
@@ -140,13 +114,10 @@ std::vector<FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult
         {
             if (entry.is_regular_file())
             {
-                struct FileInfo fileInfo;
+                FileInfo fileInfo;
                 fileInfo.filename = entry.path().stem();
                 fileInfo.extension = entry.path().extension();
-                // fileInfo.time = fs::last_write_time(entry.path())
-                struct stat attr;
-                stat(entry.path().c_str(), &attr);
-                fileInfo.time = attr.st_mtime;
+                fileInfo.time = getFileLastWriteTime(entry.path().c_str());
                 foundFiles.push_back(fileInfo);
             }
         }
@@ -163,12 +134,12 @@ std::vector<FileInfo> Server::sortFiles(char* path, SortBy sortBy, SortingResult
     return foundFiles;
 }
 
-void Server::sendResponseSuccess(int clientSocket, std::vector<FileInfo> &foundFiles)
+void Server::sendResponseSuccess(Socket &clientSocket, std::vector<FileInfo> &foundFiles)
 {
     int messageSize;
     int numberOfFiles = foundFiles.size();
     char buffer[4096] = {0};
-    messageSize = write(clientSocket, &numberOfFiles, sizeof(int));
+    messageSize = clientSocket.write(&numberOfFiles, sizeof(int));
     if (messageSize == -1)
     {
         std::clog << "[Error] Failed to send number of files: write(): " << std::system_category().message(errno) << std::endl;
@@ -180,7 +151,7 @@ void Server::sendResponseSuccess(int clientSocket, std::vector<FileInfo> &foundF
         std::string fileInfoStr;
         struct FileInfo fileInfo = foundFiles[i];
         fileInfoStr = fileInfo.filename + fileInfo.extension + " | " + std::to_string(fileInfo.time);
-        messageSize = write(clientSocket, fileInfoStr.c_str(), 4095);
+        messageSize = clientSocket.write((void*) fileInfoStr.c_str(), 4095);
         if (messageSize < 0)
         {
             std::clog << "[Error] Failed to read server's reply: read(): " << std::system_category().message(errno) << std::endl;
@@ -189,64 +160,14 @@ void Server::sendResponseSuccess(int clientSocket, std::vector<FileInfo> &foundF
     std::clog << "[Info] Sent the client a response about the success." << std::endl;
 }
 
-void Server::sendResponseFailure(int clientSocket, SortingResult result)
+void Server::sendResponseFailure(Socket &clientSocket, SortingResult result)
 {
     int messageSize;
-    messageSize = write(clientSocket, &result, sizeof(SortingResult));
+    messageSize = clientSocket.write(&result, sizeof(SortingResult));
     if (messageSize == -1)
     {
         std::clog << "[Error] Failed to send error: write(): " << std::system_category().message(errno) << std::endl;
         return;
     }
     std::clog << "[Info] Sent a response to the client about the failure." << std::endl;
-}
-
-std::optional<addrinfo*> Server::getServerAddresses() noexcept
-{
-    std::clog << "[Debug] Resolving server hostname.\n";
-    addrinfo hints = {0}, *serverAddress;
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if (getaddrinfo(hostname.c_str(), port.c_str(), &hints, &serverAddress) != 0)
-    {
-        std::clog << "[Error] Failed to resolve server's local address: getaddrinfo(): " << std::system_category().message(errno) << std::endl;
-        return std::nullopt;
-    }
-
-    return serverAddress;
-}
-
-std::optional<int> Server::createServerSocket(addrinfo* serverAddress) noexcept
-{
-    if (serverAddress == nullptr)
-    {
-        std::clog << "[Error] createServerSocket(): serverAddress is nullptr." << std::endl;
-        return std::nullopt;
-    }
-
-    std::clog << "[Debug] Creating server socket object.\n";
-    int serverSocket = socket(serverAddress->ai_family,
-                              serverAddress->ai_socktype,
-                              serverAddress->ai_protocol);
-    if (serverSocket == -1)
-    {
-        std::clog << "[Error] Failed to create server socket: socket(): " << std::system_category().message((errno)) << std::endl;
-        return std::nullopt;
-    }
-
-    std::clog << "[Debug] Binding socket to the resolved address." << std::endl;
-    if (bind(serverSocket, serverAddress->ai_addr, serverAddress->ai_addrlen) == -1)
-    {
-        std::clog << "[Error] Failed to bind server socket to address " << hostname << ":" << port << " : bind(): " << std::system_category().message((errno)) << std::endl;
-        return std::nullopt;
-    }
-
-    std::clog << "[Debug] Activating server listenning mode.\n";
-    if (listen(serverSocket, WAITING_REQUESTS) == -1){
-        std::clog << "[Error] Failed to activate socket listenner: listen(): " << std::system_category().message((errno)) << std::endl;
-        return std::nullopt;
-    }
-    std::clog << "[Info] Server is listenning for incoming connections at " << hostname << ":" << port << std::endl;
-    return serverSocket;
 }
