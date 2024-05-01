@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <vector>
 #include <algorithm>
+#include <thread>
 
 Server::Server(const char* port)
 {
@@ -48,15 +49,22 @@ int Server::start()
     serverSocket.printHostname();
     serverSocket.printIP();
     serverSocket.printPort();
-    mainloop();
-    // Can't return 0 cause server is running in the same thread.
+
+    this->running.store(true);
+    this->mainloopThread = std::thread(&Server::mainloop, this);
+    return 0;
 }
 
 void Server::shutdown()
 {
-    std::clog << "[Info] Shutting down the server...\n";
-    serverSocket.close();
-    std::clog << "[Info] Server is shut down." << std::endl;
+    if (this->running.load())
+    {
+        std::clog << "[Info] Shutting down the server...\n";
+        this->running.store(false);
+        mainloopThread.join();
+        serverSocket.close();
+        std::clog << "[Info] Server is shut down." << std::endl;
+    }
 }
 
 
@@ -86,7 +94,6 @@ void Server::mainloop()
         }
         delete client;
     }
-    // TODO this method should be run in a new thread
 }
 
 void Server::sortServe(Socket &clientSocket)

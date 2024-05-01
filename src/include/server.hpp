@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <thread>
 #include <atomic>
 
 class Server
@@ -17,8 +18,10 @@ private:
     std::string hostname;
     std::string port;
 
-    std::atomic<bool> running;
     Socket serverSocket;
+
+    std::thread mainloopThread;
+    std::atomic<bool> running;
 public:
     Server(const char* port);
     ~Server();

@@ -1,6 +1,7 @@
 #include <server.hpp>
 
 #include <iostream>
+#include <cstdio>
 
 int main(int argc, char const *argv[])
 {
@@ -13,7 +14,15 @@ int main(int argc, char const *argv[])
     }
 
     Server server(argv[1]);
-    server.start();
+    if (server.start() == -1)
+    {
+        std::cout << "Server failed to start" << std::endl;
+    }
 
+    char command;
+    while (command != 'q')
+    {
+        command = getchar();
+    }
     return 0;
 }

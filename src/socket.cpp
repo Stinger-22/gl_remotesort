@@ -52,12 +52,14 @@ Socket::Socket(Socket &&other): socketFD(other.socketFD), state(other.state), ad
 
 Socket::~Socket()
 {
-    std::clog << "[Debug] [Socket " << socketFD << "] DTOR." << std::endl;
     if (addresses != nullptr)
     {
         freeaddrinfo(addresses);
     }
-    close();
+    if (state != State::CLOSED)
+    {
+        close();
+    }
 }
 
 Socket::State Socket::getState() const
@@ -145,7 +147,6 @@ Socket* Socket::accept()
         }
         return nullptr;
     }
-    std::cout << "SocketFD = " << socket << std::endl;
     return new Socket(socket, address, size);
 }
 
