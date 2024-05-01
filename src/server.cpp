@@ -77,6 +77,7 @@ void Server::sortServe(Socket &clientSocket)
 
     SortBy sortBy;
     std::memcpy((void*)(&sortBy), buffer, sizeof(char));
+    sortBy = SortBy(int(sortBy) - 1); // TODO fix this
     if (int(sortBy) < 0 || int(sortBy) > 2)
     {
         std::clog << "[Error] Client send wrong sorting type." << std::endl;

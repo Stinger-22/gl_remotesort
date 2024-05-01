@@ -1,12 +1,11 @@
-#include <algorithm>
 #include <socket.hpp>
 
 #include <iostream>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <string_view>
 
 //                           IPv4     TCP
 addrinfo Socket::hints = {0, AF_INET, SOCK_STREAM};
@@ -140,7 +139,15 @@ Socket Socket::accept()
 
 int Socket::connect()
 {
-    return -1;
+    std::clog << "[Info] Connecting to (" << getHostname() << ":" << getPort() << ")\n";
+    if (::connect(socketFD, addresses->ai_addr, addresses->ai_addrlen) == -1)
+    {
+        std::clog << "[Error] Connection to server failed: connect(): " << std::system_category().message(errno) << std::endl;
+        return -1;
+    }
+    std::clog << "[Info] Successfully connected to " << getHostname() << ":" << getPort() << std::endl;
+    state = Socket::State::CONNECTED;
+    return 0;
 }
 
 int Socket::close()
@@ -193,8 +200,8 @@ Socket::Socket(const int socketFD, sockaddr_in address, socklen_t size)
         this->socketFD = socketFD;
         // TODO haven't make up with better solution to initialize addresses field.
         std::string_view svHostname, svPort;
-        svHostname = getHostname((struct sockaddr *)&address, size);
-        svPort = std::to_string(getPort((struct sockaddr *)&address));
+        svHostname = getHostname((sockaddr *) &address, size);
+        svPort = std::to_string(getPort((sockaddr *) &address));
         std::optional<addrinfo*> addresses = receiveAddresses(svHostname, svPort);
         if (addresses.has_value() == false)
         {

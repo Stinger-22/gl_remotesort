@@ -2,17 +2,17 @@
 #define REMOTESORT_SOCKET_HPP
 
 #include <optional>
-#include <netdb.h>
 #include <string_view>
+#include <netdb.h>
 
 class Socket
 {
 public:
     enum class State;
+    int socketFD = -1;
 private:
     static addrinfo hints;
 
-    int socketFD = -1;
     State state = Socket::State::UNINITIALIZED;
     addrinfo* addresses = nullptr;
 public:
